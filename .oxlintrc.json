@@ -4,9 +4,16 @@
     "./node_modules/ultracite/config/oxlint/core/.oxlintrc.json",
     "./node_modules/ultracite/config/oxlint/react/.oxlintrc.json"
   ],
-  "ignorePatterns": ["packages/db", "packages/auth"],
+  "ignorePatterns": [
+    "packages/db",
+    "packages/auth",
+    "**/*.d.ts",
+    "**/*.gen.ts"
+  ],
   "rules": {
     "unicorn/no-abusive-eslint-disable": "off",
-    "unicorn/filename-case": "off"
+    "unicorn/filename-case": "off",
+    "import/consistent-type-specifier-style": "off",
+    "max-statements": "off"
   }
 }

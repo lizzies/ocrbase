@@ -185,6 +185,15 @@ This project includes a `bts.jsonc` configuration file that stores your Better-T
 - Run workspace-specific commands with `bun run command-name`
 - Turborepo handles build caching and parallel execution
 
+## Git Commit Guidelines
+
+- Keep commits atomic: commit only the files you touched and list each path explicitly
+- For tracked files run `git commit -m "<scoped message>" -- path/to/file1 path/to/file2`
+- For brand-new files: `git restore --staged :/ && git add "path/to/file1" "path/to/file2" && git commit -m "<scoped message>"`
+- Never amend commits unless explicitly approved
+- Never run destructive git operations (`reset --hard`, `rm`, checkout to older commits) without explicit approval
+- Always check `git status` before committing
+
 # Ultracite Code Standards
 
 This project uses **Ultracite**, a zero-config preset that enforces strict code quality standards through automated formatting and linting.
