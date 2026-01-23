@@ -130,12 +130,10 @@ Severity levels:
 **Fix:**
 
 ```tsx
-// Add focus trap using @radix-ui/react-focus-guards or similar
-import { FocusScope } from "@radix-ui/react-focus-scope";
+// Use Base UI components which handle focus management automatically
+import { Dialog } from "@base-ui/react/dialog";
 
-<FocusScope trapped>
-  <ModalContent>{children}</ModalContent>
-</FocusScope>;
+<Dialog.Popup>{children}</Dialog.Popup>;
 ```
 
 ### Warning: Loading State Duration
@@ -200,8 +198,3 @@ Reviewed {N} files against Vercel design guidelines.
 
 1. {First critical fix}
 2. {Second critical fix}
-   ...
-
-```
-
-```
