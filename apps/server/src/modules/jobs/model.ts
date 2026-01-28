@@ -13,11 +13,13 @@ const JOB_STATUSES = [
 const JobId = Type.String({ pattern: JOB_ID_PATTERN });
 
 const CreateJobBody = Type.Object({
+  hints: Type.Optional(Type.String()),
   schemaId: Type.Optional(Type.String()),
   type: Type.Union([Type.Literal("parse"), Type.Literal("extract")]),
 });
 
 const CreateJobFromUrl = Type.Object({
+  hints: Type.Optional(Type.String()),
   schemaId: Type.Optional(Type.String()),
   type: Type.Union([Type.Literal("parse"), Type.Literal("extract")]),
   url: Type.String({ format: "uri" }),
@@ -54,8 +56,9 @@ const JobResponse = Type.Object({
   fileKey: Type.Union([Type.String(), Type.Null()]),
   fileName: Type.String(),
   fileSize: Type.Number(),
+  hints: Type.Union([Type.String(), Type.Null()]),
   id: Type.String({ pattern: JOB_ID_PATTERN }),
-  jsonResult: Type.Optional(Type.Unknown()),
+  jsonResult: Type.Union([Type.Unknown(), Type.Null()]),
   markdownResult: Type.Union([Type.String(), Type.Null()]),
   mimeType: Type.String(),
   organizationId: Type.String(),

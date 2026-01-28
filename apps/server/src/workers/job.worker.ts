@@ -17,12 +17,14 @@ const runExtraction = async (
   jobId: string,
   markdown: string,
   schema: Record<string, unknown> | undefined,
+  hints: string | null,
   pageCount: number,
   startTime: number
 ): Promise<void> => {
   await updateJobStatus(jobId, "extracting");
 
   const jsonResult = await llmService.processExtraction({
+    hints: hints ?? undefined,
     markdown,
     schema,
   });
@@ -127,7 +129,14 @@ const processJob = async (bullJob: BullJob<JobData>): Promise<void> => {
       const schema = job.schema?.jsonSchema as
         | Record<string, unknown>
         | undefined;
-      await runExtraction(jobId, markdown, schema, pageCount, startTime);
+      await runExtraction(
+        jobId,
+        markdown,
+        schema,
+        job.hints,
+        pageCount,
+        startTime
+      );
     } else {
       await finishParseJob(jobId, markdown, pageCount, startTime);
     }

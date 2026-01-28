@@ -35,6 +35,7 @@ export const jobs = pgTable(
     schemaId: text("schema_id").references(() => schemas.id, {
       onDelete: "set null",
     }),
+    hints: text("hints"),
     llmProvider: text("llm_provider"),
     llmModel: text("llm_model"),
     markdownResult: text("markdown_result"),

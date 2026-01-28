@@ -1,4 +1,8 @@
-import { nanoid } from "nanoid";
+import { customAlphabet } from "nanoid";
+
+const alphabet =
+  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const nanoid = customAlphabet(alphabet, 16);
 
 export const ID_PREFIXES = {
   apiKey: "ak",
@@ -12,6 +16,6 @@ type IdPrefix = keyof typeof ID_PREFIXES;
 
 export const createId = (prefix: IdPrefix): string => {
   const prefixValue = ID_PREFIXES[prefix];
-  const id = nanoid(16);
+  const id = nanoid();
   return `${prefixValue}_${id}`;
 };

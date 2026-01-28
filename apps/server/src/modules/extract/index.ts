@@ -14,7 +14,8 @@ export const extractRoutes = new Elysia({ prefix: "/api/extract" })
     {
       body: t.Object({
         file: t.Optional(t.File()),
-        schemaId: t.String(),
+        hints: t.Optional(t.String()),
+        schemaId: t.Optional(t.String()),
         url: t.Optional(t.String()),
       }),
       detail: {

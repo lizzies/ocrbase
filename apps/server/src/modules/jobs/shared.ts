@@ -20,8 +20,9 @@ export const formatJobResponse = (job: Job): JobResponse => ({
   fileKey: job.fileKey,
   fileName: job.fileName,
   fileSize: job.fileSize,
+  hints: job.hints,
   id: job.id,
-  jsonResult: job.jsonResult ?? undefined,
+  jsonResult: job.jsonResult ?? null,
   markdownResult: job.markdownResult,
   mimeType: job.mimeType,
   organizationId: job.organizationId,
@@ -49,6 +50,7 @@ export const createJobHandler = async <
   T extends {
     body: {
       file?: File;
+      hints?: string;
       schemaId?: string;
       url?: string;
     };
@@ -77,6 +79,7 @@ export const createJobHandler = async <
     if (hasValidUrl && body.url) {
       const job = await JobService.createFromUrl({
         body: {
+          hints: body.hints,
           schemaId: body.schemaId,
           type: options.type,
           url: body.url,
@@ -105,6 +108,7 @@ export const createJobHandler = async <
 
     const job = await JobService.create({
       body: {
+        hints: body.hints,
         schemaId: body.schemaId,
         type: options.type,
       },
