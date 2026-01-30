@@ -1,16 +1,24 @@
 {
   "name": "@ocrbase/sdk",
   "version": "0.1.0",
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "exports": {
     ".": {
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./react": {
-      "default": "./src/react/index.ts"
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js",
+      "default": "./dist/react/index.js"
     }
   },
   "scripts": {
+    "build": "tsup",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
@@ -23,6 +31,7 @@
     "@types/react": "catalog:",
     "react": "catalog:",
     "server": "workspace:*",
+    "tsup": "^8.5.0",
     "typescript": "catalog:"
   },
   "peerDependencies": {
