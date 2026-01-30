@@ -31,13 +31,24 @@ jobs:
           VERSION="${VERSION#sdk-v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Update SDK version
-        run: |
-          cd packages/sdk
-          npm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
-
       - name: Build SDK
         run: bun run --filter @ocrbase/sdk build
+
+      - name: Prepare package for publishing
+        run: |
+          cd packages/sdk
+          # Update version and resolve catalog: references for npm compatibility
+          node -e "
+            const pkg = require('./package.json');
+            pkg.version = '${{ steps.version.outputs.version }}';
+            // Resolve catalog: references
+            if (pkg.dependencies?.elysia === 'catalog:') {
+              pkg.dependencies.elysia = '^1.4.22';
+            }
+            // Remove workspace: devDependencies (not needed for publish)
+            delete pkg.devDependencies;
+            require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
+          "
 
       - name: Publish to npm
         run: |
