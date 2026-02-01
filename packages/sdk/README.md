@@ -8,14 +8,20 @@ Type-safe SDK for ocrbase - document parsing and data extraction API.
 npm install ocrbase
 ```
 
+## Environment Setup
+
+```env
+# .env
+OCRBASE_API_KEY=sk_xxx
+```
+
 ## Quick Start
 
 ```typescript
 import { createClient } from "ocrbase";
 
 const { parse, extract } = createClient({
-  baseUrl: "https://api.ocrbase.dev",
-  apiKey: "ak_xxx",
+  apiKey: process.env.OCRBASE_API_KEY,
 });
 
 // Parse document to markdown
@@ -23,11 +29,11 @@ const job = await parse({ file: document });
 console.log(job.markdownResult);
 
 // Extract structured data
-const job = await extract({
+const extracted = await extract({
   file: invoice,
   hints: "invoice number, date, total, line items",
 });
-console.log(job.jsonResult);
+console.log(extracted.jsonResult);
 ```
 
 ## Core API
@@ -35,7 +41,7 @@ console.log(job.jsonResult);
 ### Parse - Document to Markdown
 
 ```typescript
-const { parse } = createClient({ baseUrl, apiKey });
+const { parse } = createClient({ apiKey: process.env.OCRBASE_API_KEY });
 
 // From file
 const job = await parse({ file: myFile });
@@ -52,7 +58,7 @@ job.markdownResult; // "# Document Title\n\nContent..."
 ### Extract - Document to Structured Data
 
 ```typescript
-const { extract } = createClient({ baseUrl, apiKey });
+const { extract } = createClient({ apiKey: process.env.OCRBASE_API_KEY });
 
 // With hints (schema-free extraction)
 const job = await extract({
@@ -73,7 +79,7 @@ job.jsonResult; // { invoiceNumber: "INV-001", total: 1234.56, ... }
 ### Jobs - Manage Processing Jobs
 
 ```typescript
-const { jobs } = createClient({ baseUrl, apiKey });
+const { jobs } = createClient({ apiKey: process.env.OCRBASE_API_KEY });
 
 // List jobs
 const { data, pagination } = await jobs.list({
@@ -96,7 +102,7 @@ await jobs.delete("job_abc123");
 ### Schemas - Manage Extraction Schemas
 
 ```typescript
-const { schemas } = createClient({ baseUrl, apiKey });
+const { schemas } = createClient({ apiKey: process.env.OCRBASE_API_KEY });
 
 // List schemas
 const list = await schemas.list();
@@ -124,7 +130,7 @@ const generated = await schemas.generate({
 ### WebSocket - Real-time Job Updates
 
 ```typescript
-const { ws } = createClient({ baseUrl, apiKey });
+const { ws } = createClient({ apiKey: process.env.OCRBASE_API_KEY });
 
 const unsubscribe = ws.subscribeToJob("job_abc123", {
   onStatus: (status) => console.log("Status:", status),
@@ -155,12 +161,7 @@ const queryClient = new QueryClient();
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <OCRBaseProvider
-        config={{
-          baseUrl: "https://api.ocrbase.dev",
-          apiKey: "ak_xxx",
-        }}
-      >
+      <OCRBaseProvider config={{ apiKey: process.env.OCRBASE_API_KEY }}>
         <YourApp />
       </OCRBaseProvider>
     </QueryClientProvider>
@@ -319,30 +320,77 @@ try {
 
 ---
 
+## LLM Integration
+
+**Best practice:** Always parse documents with ocrbase before sending to LLMs. Raw PDF binary data wastes tokens and produces poor results. ocrbase extracts clean markdown that LLMs understand.
+
+### With OpenAI
+
+```typescript
+import { createClient } from "ocrbase";
+import OpenAI from "openai";
+
+const ocrbase = createClient({ apiKey: process.env.OCRBASE_API_KEY });
+const openai = new OpenAI();
+
+const { markdownResult } = await ocrbase.parse({ file: pdfFile });
+
+const response = await openai.chat.completions.create({
+  model: "gpt-4o",
+  messages: [
+    { role: "user", content: `Summarize this document:\n\n${markdownResult}` },
+  ],
+});
+```
+
+### With Vercel AI SDK
+
+```typescript
+import { createClient } from "ocrbase";
+import { generateText } from "ai";
+import { openai } from "@ai-sdk/openai";
+
+const ocrbase = createClient({ apiKey: process.env.OCRBASE_API_KEY });
+
+const { markdownResult } = await ocrbase.parse({ file: pdfFile });
+
+const { text } = await generateText({
+  model: openai("gpt-4o"),
+  prompt: `Extract key points:\n\n${markdownResult}`,
+});
+```
+
+### With OpenRouter
+
+```typescript
+import { createClient } from "ocrbase";
+import OpenAI from "openai";
+
+const ocrbase = createClient({ apiKey: process.env.OCRBASE_API_KEY });
+const openrouter = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+const { markdownResult } = await ocrbase.parse({ file: pdfFile });
+
+const response = await openrouter.chat.completions.create({
+  model: "anthropic/claude-sonnet-4",
+  messages: [{ role: "user", content: `Analyze:\n\n${markdownResult}` }],
+});
+```
+
+---
+
 ## Configuration
 
 ```typescript
 const client = createClient({
   // Required
-  baseUrl: "https://api.ocrbase.dev",
+  apiKey: process.env.OCRBASE_API_KEY,
 
-  // API key authentication
-  apiKey: "ak_xxx",
-
-  // Or custom headers
-  headers: {
-    Authorization: "Bearer xxx",
-  },
-
-  // Request/response interceptors
-  onRequest: (path, options) => {
-    console.log("Request:", path);
-    return options;
-  },
-  onResponse: (response) => {
-    console.log("Response:", response.status);
-    return response;
-  },
+  // Optional: custom base URL for self-hosted instances
+  // baseUrl: "https://your-instance.com",
 });
 ```
 
