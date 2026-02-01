@@ -19,25 +19,24 @@ OCRBASE_API_KEY=sk_xxx
 
 ## Quick Start
 
-**Important:** Jobs are processed asynchronously. The `parse()` and `extract()` functions wait for completion by default.
+**Important:** Jobs are processed asynchronously. Use WebSocket for real-time status updates.
 
 ```typescript
 import { createClient } from "ocrbase";
 
-const { parse, extract } = createClient({
+const { parse, extract, ws } = createClient({
   apiKey: process.env.OCRBASE_API_KEY,
 });
 
-// Parse document to markdown (waits for completion)
+// Start parsing (returns job with status "pending")
 const job = await parse({ file: document });
-console.log(job.markdownResult); // string - the parsed markdown
 
-// Extract structured data (waits for completion)
-const extracted = await extract({
-  file: invoice,
-  hints: "invoice number, date, total, line items",
+// Subscribe to real-time updates via WebSocket
+ws.subscribeToJob(job.id, {
+  onComplete: (result) => {
+    console.log(result.markdownResult); // string - the parsed markdown
+  },
 });
-console.log(extracted.jsonResult); // object - the extracted data
 ```
 
 ## Core API
@@ -45,39 +44,21 @@ console.log(extracted.jsonResult); // object - the extracted data
 ### Parse - Document to Markdown
 
 ```typescript
-const { parse, jobs } = createClient({ apiKey: process.env.OCRBASE_API_KEY });
+const { parse, ws } = createClient({ apiKey: process.env.OCRBASE_API_KEY });
 
-// From file (waits for completion)
+// From file
 const job = await parse({ file: myFile });
+// job.status === "pending"
 
-// From URL (waits for completion)
+// From URL
 const job = await parse({ url: "https://example.com/document.pdf" });
 
-// Result
-job.id; // "job_abc123"
-job.status; // "completed"
-job.markdownResult; // "# Document Title\n\nContent..."
-```
-
-### Server-Side Polling
-
-For more control over async flow (e.g., in API routes), use polling:
-
-```typescript
-const { parse, jobs } = createClient({ apiKey: process.env.OCRBASE_API_KEY });
-
-// Start parsing (returns immediately with pending job)
-const job = await parse({ file: myFile });
-// job.status === "pending", job.markdownResult === null
-
-// Poll until complete
-let result = job;
-while (result.status !== "completed" && result.status !== "failed") {
-  await new Promise((r) => setTimeout(r, 1000)); // wait 1s
-  result = await jobs.get(job.id);
-}
-
-console.log(result.markdownResult); // now available
+// Subscribe to completion
+ws.subscribeToJob(job.id, {
+  onComplete: (result) => {
+    console.log(result.markdownResult); // "# Document Title\n\nContent..."
+  },
+});
 ```
 
 ### Extract - Document to Structured Data
@@ -152,16 +133,14 @@ const generated = await schemas.generate({
 });
 ```
 
-### WebSocket - Real-time Job Updates (Client-Side Only)
-
-**Note:** WebSocket requires browser context. For server-side (API routes, Node.js scripts), use polling with `jobs.get()` instead.
+### WebSocket - Real-time Job Updates
 
 ```typescript
 const { ws } = createClient({ apiKey: process.env.OCRBASE_API_KEY });
 
 const unsubscribe = ws.subscribeToJob("job_abc123", {
   onStatus: (status) => console.log("Status:", status),
-  onComplete: (job) => console.log("Done:", job.jsonResult),
+  onComplete: (job) => console.log("Done:", job.markdownResult),
   onError: (error) => console.error("Failed:", error),
 });
 
@@ -349,66 +328,37 @@ try {
 
 ## LLM Integration
 
-**Best practice:** Always parse documents with ocrbase before sending to LLMs. Raw PDF binary data wastes tokens and produces poor results. ocrbase extracts clean markdown that LLMs understand.
+**Best practice:** Parse documents with ocrbase before sending to LLMs. Raw PDF binary wastes tokens and produces poor results.
 
-### With OpenAI
+**Pattern:** Parse on client with WebSocket → send markdown to your API → call LLM.
 
-```typescript
-import { createClient } from "ocrbase";
-import OpenAI from "openai";
+```tsx
+// Client: parse and send to your API
+const { status, job } = useJobSubscription(jobId);
 
-const { parse } = createClient({ apiKey: process.env.OCRBASE_API_KEY });
-const openai = new OpenAI();
-
-// Parse PDF to markdown (waits for completion)
-const job = await parse({ file: pdfFile });
-
-const response = await openai.chat.completions.create({
-  model: "gpt-4o",
-  messages: [
-    {
-      role: "user",
-      content: `Summarize this document:\n\n${job.markdownResult}`,
-    },
-  ],
-});
+if (status === "completed") {
+  const res = await fetch("/api/analyze", {
+    method: "POST",
+    body: JSON.stringify({ markdown: job.markdownResult }),
+  });
+}
 ```
 
-### With Vercel AI SDK
-
 ```typescript
-import { createClient } from "ocrbase";
-import { generateText } from "ai";
-import { openai } from "@ai-sdk/openai";
-
-const { parse } = createClient({ apiKey: process.env.OCRBASE_API_KEY });
-
-const job = await parse({ file: pdfFile });
-
-const { text } = await generateText({
-  model: openai("gpt-4o"),
-  prompt: `Extract key points:\n\n${job.markdownResult}`,
-});
-```
-
-### With OpenRouter
-
-```typescript
-import { createClient } from "ocrbase";
+// Server API route: call OpenAI/OpenRouter/etc
 import OpenAI from "openai";
 
-const { parse } = createClient({ apiKey: process.env.OCRBASE_API_KEY });
-const openrouter = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
-});
+export async function POST(req: Request) {
+  const { markdown } = await req.json();
 
-const job = await parse({ file: pdfFile });
+  const openai = new OpenAI();
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: `Summarize:\n\n${markdown}` }],
+  });
 
-const response = await openrouter.chat.completions.create({
-  model: "anthropic/claude-sonnet-4",
-  messages: [{ role: "user", content: `Analyze:\n\n${job.markdownResult}` }],
-});
+  return Response.json({ result: response.choices[0].message.content });
+}
 ```
 
 ---
