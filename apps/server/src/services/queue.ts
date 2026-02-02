@@ -14,31 +14,56 @@ export interface JobData {
   userId: string;
 }
 
-export const connection: ConnectionOptions = {
-  host: env.REDIS_URL ? new URL(env.REDIS_URL).hostname : "localhost",
-  port: env.REDIS_URL ? Number(new URL(env.REDIS_URL).port) || 6379 : 6379,
+export const getRedisConnection = (): ConnectionOptions | null => {
+  if (!env.REDIS_URL) {
+    return null;
+  }
+  const url = new URL(env.REDIS_URL);
+  return {
+    host: url.hostname,
+    password: url.password || undefined,
+    port: Number(url.port) || 6379,
+    username: url.username || undefined,
+  };
 };
 
-export const jobQueue = new Queue<JobData>("ocr-jobs", {
-  connection,
-  defaultJobOptions: {
-    attempts: DEFAULT_JOB_ATTEMPTS,
-    backoff: {
-      delay: DEFAULT_BACKOFF_DELAY,
-      type: "exponential",
+// Lazy-init for build-time safety (no Redis connection at import)
+let _jobQueue: Queue<JobData> | null = null;
+
+const getJobQueue = (): Queue<JobData> | null => {
+  if (_jobQueue) {
+    return _jobQueue;
+  }
+  const connection = getRedisConnection();
+  if (!connection) {
+    return null;
+  }
+  _jobQueue = new Queue<JobData>("ocr-jobs", {
+    connection,
+    defaultJobOptions: {
+      attempts: DEFAULT_JOB_ATTEMPTS,
+      backoff: {
+        delay: DEFAULT_BACKOFF_DELAY,
+        type: "exponential",
+      },
+      removeOnComplete: {
+        age: DEFAULT_JOB_RETENTION_COMPLETE,
+        count: MAX_COMPLETED_JOBS,
+      },
+      removeOnFail: {
+        age: DEFAULT_JOB_RETENTION_FAIL,
+      },
     },
-    removeOnComplete: {
-      age: DEFAULT_JOB_RETENTION_COMPLETE,
-      count: MAX_COMPLETED_JOBS,
-    },
-    removeOnFail: {
-      age: DEFAULT_JOB_RETENTION_FAIL,
-    },
-  },
-});
+  });
+  return _jobQueue;
+};
 
 export const addJob = async (data: JobData): Promise<string> => {
-  const job = await jobQueue.add("process-document", data, {
+  const queue = getJobQueue();
+  if (!queue) {
+    throw new Error("Redis not configured");
+  }
+  const job = await queue.add("process-document", data, {
     jobId: data.jobId,
   });
   return job.id ?? data.jobId;
@@ -46,9 +71,22 @@ export const addJob = async (data: JobData): Promise<string> => {
 
 export const checkQueueHealth = async (): Promise<boolean> => {
   try {
-    await jobQueue.getJobCounts();
+    const queue = getJobQueue();
+    if (!queue) {
+      return false;
+    }
+    await queue.getJobCounts();
     return true;
   } catch {
     return false;
   }
+};
+
+// For worker process - will throw if Redis not configured
+export const getWorkerConnection = (): ConnectionOptions => {
+  const conn = getRedisConnection();
+  if (!conn) {
+    throw new Error("REDIS_URL is required for worker");
+  }
+  return conn;
 };

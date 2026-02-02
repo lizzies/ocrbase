@@ -23,11 +23,14 @@ export type OnResponseHook = (
 ) => Response | void | Promise<Response | void>;
 
 /**
- * Configuration for the OCRBase SDK client.
+ * Configuration for the ocrbase SDK client.
  */
 export interface SDKConfig {
-  /** Base URL of the OCRBase API server */
-  baseUrl: string;
+  /** Base URL of the ocrbase API server (default: https://api.ocrbase.dev) */
+  baseUrl?: string;
+
+  /** API key for authentication (recommended) */
+  apiKey?: string;
 
   /** Default headers for all requests */
   headers?: SDKHeaders;
@@ -58,15 +61,14 @@ export interface JobResponse {
   type: JobType;
   status: JobStatus;
   fileName: string;
-  fileKey: string;
+  fileKey: string | null;
   fileSize: number;
   mimeType: string;
   sourceUrl: string | null;
   schemaId: string | null;
-  llmProvider: string | null;
-  llmModel: string | null;
+  hints: string | null;
   markdownResult: string | null;
-  jsonResult?: unknown;
+  jsonResult: unknown | null;
   pageCount: number | null;
   tokenCount: number | null;
   processingTimeMs: number | null;
@@ -102,13 +104,16 @@ export interface ListJobsQuery {
   sortOrder?: "asc" | "desc";
 }
 
-export interface CreateJobInput {
+export interface ParseInput {
   file?: File;
   url?: string;
-  type: JobType;
+}
+
+export interface ExtractInput {
+  file?: File;
+  url?: string;
   schemaId?: string;
-  llmProvider?: string;
-  llmModel?: string;
+  hints?: string;
 }
 
 export interface SchemaResponse {

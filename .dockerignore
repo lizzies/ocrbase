@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+
+# CI/CD
+.github
+
+# Editor/IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Claude
+.claude
+
+# Dependencies (will be installed in container)
+node_modules
+
+# Apps not needed for server build
+apps/web
+
+# Build artifacts
+dist
+*.log
+
+# Environment files
+.env*
+!.env.example
+
+# Docker files (not needed in context)
+docker-compose*.yml
+Dockerfile*
+
+# Documentation
+*.md
+LICENSE
+
+# Turbo cache
+.turbo

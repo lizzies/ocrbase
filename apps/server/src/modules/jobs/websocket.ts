@@ -4,6 +4,7 @@ import { jobs } from "@ocrbase/db/schema/jobs";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 
+import { validateApiKey } from "../../lib/api-key";
 import {
   subscribeToJob,
   unsubscribeFromJob,
@@ -42,36 +43,37 @@ export const jobsWebSocket = new Elysia().ws("/ws/jobs/:jobId", {
   async open(ws) {
     const { jobId } = ws.data.params;
 
-    const headers = new Headers();
-    const cookie = ws.data.headers?.cookie;
+    let userId: string;
+    let organizationId: string;
 
-    if (cookie) {
-      headers.set("cookie", cookie);
-    }
-
-    const session = await auth.api.getSession({
-      headers,
+    // Try API key auth first (skip usage tracking for websocket)
+    const apiKeyAuth = await validateApiKey(ws.data.headers?.authorization, {
+      updateUsage: false,
     });
+    if (apiKeyAuth) {
+      ({ userId } = apiKeyAuth);
+      ({ organizationId } = apiKeyAuth);
+    } else {
+      // Fall back to session auth
+      const headers = new Headers();
+      const cookie = ws.data.headers?.cookie;
+      if (cookie) {
+        headers.set("cookie", cookie);
+      }
 
-    if (!session?.user) {
-      ws.send(JSON.stringify({ error: "Unauthorized", type: "error" }));
-      ws.close();
-      return;
-    }
+      const session = await auth.api.getSession({ headers });
+      if (!session?.user || !session.session.activeOrganizationId) {
+        ws.send(JSON.stringify({ error: "Unauthorized", type: "error" }));
+        ws.close();
+        return;
+      }
 
-    const userId = session.user.id;
-    const activeOrg = session.session.activeOrganizationId;
-
-    if (!activeOrg) {
-      ws.send(
-        JSON.stringify({ error: "No active organization", type: "error" })
-      );
-      ws.close();
-      return;
+      userId = session.user.id;
+      organizationId = session.session.activeOrganizationId;
     }
 
     const job = await db.query.jobs.findFirst({
-      where: and(eq(jobs.id, jobId), eq(jobs.organizationId, activeOrg)),
+      where: and(eq(jobs.id, jobId), eq(jobs.organizationId, organizationId)),
     });
 
     if (!job) {
@@ -87,7 +89,7 @@ export const jobsWebSocket = new Elysia().ws("/ws/jobs/:jobId", {
     (ws.data as unknown as { wsData: WebSocketData }).wsData = {
       callback,
       jobId,
-      organizationId: activeOrg,
+      organizationId,
       userId,
     };
 

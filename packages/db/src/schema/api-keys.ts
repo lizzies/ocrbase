@@ -1,0 +1,143 @@
+import { relations } from "drizzle-orm";
+import {
+  boolean,
+  date,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  unique,
+} from "drizzle-orm/pg-core";
+
+import { createId } from "../lib/ids";
+
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId("apiKey")),
+    name: text("name").notNull(),
+    keyHash: text("key_hash").notNull().unique(),
+    keyPrefix: text("key_prefix").notNull(),
+    organizationId: text("organization_id").notNull(),
+    userId: text("user_id").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    requestCount: integer("request_count").notNull().default(0),
+    lastUsedAt: timestamp("last_used_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("api_keys_key_hash_idx").on(table.keyHash),
+    index("api_keys_is_active_idx").on(table.isActive),
+    index("api_keys_organization_id_idx").on(table.organizationId),
+    index("api_keys_user_id_idx").on(table.userId),
+  ]
+);
+
+export const apiKeyUsage = pgTable(
+  "api_key_usage",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId("apiKeyUsage")),
+    apiKeyId: text("api_key_id")
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    method: text("method").notNull(),
+    statusCode: integer("status_code").notNull(),
+    processingMs: integer("processing_ms"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("api_key_usage_api_key_id_idx").on(table.apiKeyId),
+    index("api_key_usage_created_at_idx").on(table.createdAt),
+  ]
+);
+
+export const usageEvents = pgTable(
+  "usage_events",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId("usageEvent")),
+    apiKeyId: text("api_key_id")
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    jobId: text("job_id").notNull(),
+    pages: integer("pages").notNull().default(0),
+    promptTokens: integer("prompt_tokens").notNull().default(0),
+    completionTokens: integer("completion_tokens").notNull().default(0),
+    model: text("model"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    unique("usage_events_job_id_unique").on(table.jobId),
+    index("usage_events_api_key_id_idx").on(table.apiKeyId),
+    index("usage_events_created_at_idx").on(table.createdAt),
+  ]
+);
+
+export const apiKeyUsageDaily = pgTable(
+  "api_key_usage_daily",
+  {
+    apiKeyId: text("api_key_id")
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    day: date("day").notNull(),
+    pages: integer("pages").notNull().default(0),
+    jobsCount: integer("jobs_count").notNull().default(0),
+    promptTokens: integer("prompt_tokens").notNull().default(0),
+    completionTokens: integer("completion_tokens").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.apiKeyId, table.day] }),
+    index("api_key_usage_daily_api_key_id_idx").on(table.apiKeyId),
+  ]
+);
+
+export const apiKeysRelations = relations(apiKeys, ({ many }) => ({
+  usage: many(apiKeyUsage),
+  usageEvents: many(usageEvents),
+  usageDaily: many(apiKeyUsageDaily),
+}));
+
+export const apiKeyUsageRelations = relations(apiKeyUsage, ({ one }) => ({
+  apiKey: one(apiKeys, {
+    fields: [apiKeyUsage.apiKeyId],
+    references: [apiKeys.id],
+  }),
+}));
+
+export const usageEventsRelations = relations(usageEvents, ({ one }) => ({
+  apiKey: one(apiKeys, {
+    fields: [usageEvents.apiKeyId],
+    references: [apiKeys.id],
+  }),
+}));
+
+export const apiKeyUsageDailyRelations = relations(
+  apiKeyUsageDaily,
+  ({ one }) => ({
+    apiKey: one(apiKeys, {
+      fields: [apiKeyUsageDaily.apiKeyId],
+      references: [apiKeys.id],
+    }),
+  })
+);
+
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
+export type ApiKeyUsage = typeof apiKeyUsage.$inferSelect;
+export type NewApiKeyUsage = typeof apiKeyUsage.$inferInsert;
+export type UsageEvent = typeof usageEvents.$inferSelect;
+export type NewUsageEvent = typeof usageEvents.$inferInsert;
+export type ApiKeyUsageDaily = typeof apiKeyUsageDaily.$inferSelect;
+export type NewApiKeyUsageDaily = typeof apiKeyUsageDaily.$inferInsert;

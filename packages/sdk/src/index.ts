@@ -1,5 +1,6 @@
 // Client
 export {
+  createClient,
   createOCRBaseClient,
   type EdenClient,
   type OCRBaseClient,
@@ -15,8 +16,8 @@ export {
 
 // Types
 export type {
-  CreateJobInput,
   CreateSchemaInput,
+  ExtractInput,
   GenerateSchemaInput,
   GenerateSchemaResponse,
   HealthCheck,
@@ -31,6 +32,7 @@ export type {
   OnRequestHook,
   OnResponseHook,
   PaginationMeta,
+  ParseInput,
   SchemaResponse,
   SDKConfig,
   SDKHeaders,

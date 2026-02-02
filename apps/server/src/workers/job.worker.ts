@@ -1,43 +1,47 @@
-/* eslint-disable eslint-plugin-jest/require-hook */
 import { type Job as BullJob, Worker } from "bullmq";
 
 import {
   completeJob,
   failJob,
   getJobById,
+  updateJobFileInfo,
   updateJobStatus,
 } from "../lib/job-status";
 import { type WorkerJobContext, workerLogger } from "../lib/worker-logger";
 import { llmService } from "../services/llm";
 import { parseDocument } from "../services/ocr";
-import { type JobData, connection } from "../services/queue";
+import { type JobData, getWorkerConnection } from "../services/queue";
 import { StorageService } from "../services/storage";
 
 const runExtraction = async (
   jobId: string,
   markdown: string,
   schema: Record<string, unknown> | undefined,
-  llmModel: string | null,
-  llmProvider: string | null,
+  hints: string | null,
   pageCount: number,
   startTime: number
 ): Promise<void> => {
   await updateJobStatus(jobId, "extracting");
 
-  const jsonResult = await llmService.processExtraction({
+  const extractionResult = await llmService.processExtraction({
+    hints: hints ?? undefined,
     markdown,
-    model: llmModel ?? undefined,
-    provider: llmProvider ?? undefined,
     schema,
   });
 
   const processingTimeMs = Date.now() - startTime;
+  const tokenCount =
+    extractionResult.usage.promptTokens +
+    extractionResult.usage.completionTokens;
 
   await completeJob(jobId, {
-    jsonResult,
+    jsonResult: extractionResult.data,
+    llmModel: extractionResult.model,
+    llmUsage: extractionResult.usage,
     markdownResult: markdown,
     pageCount,
     processingTimeMs,
+    tokenCount,
   });
 };
 
@@ -80,11 +84,45 @@ const processJob = async (bullJob: BullJob<JobData>): Promise<void> => {
 
     await updateJobStatus(jobId, "processing", { startedAt: new Date() });
 
-    const fileBuffer = await StorageService.getFile(job.fileKey);
-    const { markdown, pageCount } = await parseDocument(
-      fileBuffer,
-      job.mimeType
-    );
+    // Download from URL if fileKey is not set
+    let { fileKey } = job;
+    let { mimeType } = job;
+
+    if (!fileKey && job.sourceUrl) {
+      const response = await fetch(job.sourceUrl);
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch file from URL: ${response.statusText}`
+        );
+      }
+
+      const contentType =
+        response.headers.get("content-type") ?? "application/octet-stream";
+      const buffer = Buffer.from(await response.arrayBuffer());
+
+      const urlParts = new URL(job.sourceUrl);
+      const fileName =
+        urlParts.pathname.split("/").pop() ?? `download-${Date.now()}`;
+
+      fileKey = `${job.organizationId}/jobs/${job.id}/${fileName}`;
+      mimeType = contentType;
+
+      await StorageService.uploadFile(fileKey, buffer, contentType);
+      await updateJobFileInfo(jobId, {
+        fileKey,
+        fileName,
+        fileSize: buffer.length,
+        mimeType: contentType,
+      });
+    }
+
+    if (!fileKey) {
+      throw new Error("No file or URL provided for job");
+    }
+
+    const fileBuffer = await StorageService.getFile(fileKey);
+    const { markdown, pageCount } = await parseDocument(fileBuffer, mimeType);
 
     eventContext.pageCount = pageCount;
 
@@ -101,8 +139,7 @@ const processJob = async (bullJob: BullJob<JobData>): Promise<void> => {
         jobId,
         markdown,
         schema,
-        job.llmModel,
-        job.llmProvider,
+        job.hints,
         pageCount,
         startTime
       );
@@ -132,7 +169,7 @@ const processJob = async (bullJob: BullJob<JobData>): Promise<void> => {
 
 const worker = new Worker<JobData>("ocr-jobs", processJob, {
   concurrency: 5,
-  connection,
+  connection: getWorkerConnection(),
 });
 
 worker.on("failed", async (job, error) => {

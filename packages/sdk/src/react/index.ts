@@ -7,12 +7,15 @@ export {
 
 export {
   jobKeys,
-  useCreateJob,
   useDeleteJob,
   useDownloadJob,
   useJob,
   useJobs,
 } from "./hooks/use-jobs";
+
+export { useParse } from "./hooks/use-parse";
+
+export { useExtract } from "./hooks/use-extract";
 
 export {
   schemaKeys,

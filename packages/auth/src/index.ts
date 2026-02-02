@@ -4,6 +4,8 @@ import { env } from "@ocrbase/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
+import { eq } from "drizzle-orm";
+import { nanoid } from "nanoid";
 
 const buildSocialProviders = () => {
   const providers: Record<string, { clientId: string; clientSecret: string }> =
@@ -22,7 +24,7 @@ export const auth = betterAuth({
     provider: "pg",
     schema,
   }),
-  trustedOrigins: [env.CORS_ORIGIN],
+  trustedOrigins: env.CORS_ORIGINS,
   emailAndPassword: {
     enabled: true,
   },
@@ -36,6 +38,31 @@ export const auth = betterAuth({
       sameSite: "none",
       secure: env.NODE_ENV === "production",
       httpOnly: true,
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          try {
+            const orgId = nanoid();
+            await db.insert(schema.organization).values({
+              id: orgId,
+              name: "Personal",
+              slug: `personal-${user.id}`,
+            });
+            await db.insert(schema.member).values({
+              id: nanoid(),
+              organizationId: orgId,
+              userId: user.id,
+              role: "owner",
+            });
+          } catch {
+            await db.delete(schema.user).where(eq(schema.user.id, user.id));
+            throw new Error("Failed to create personal organization");
+          }
+        },
+      },
     },
   },
   plugins: [

@@ -13,25 +13,32 @@ COPY packages/config/package.json ./packages/config/
 COPY packages/paddleocr-vl-ts/package.json ./packages/paddleocr-vl-ts/
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN bun install --ignore-scripts
 
 # Copy source code
 COPY . .
 
-# Build the server binary
+# Build the server binary and generate OpenAPI spec
 WORKDIR /app/apps/server
-RUN bun run compile
+# Dummy env vars for build-time OpenAPI generation (not used at runtime)
+ENV BETTER_AUTH_SECRET=build-time-dummy-secret-at-least-32-chars \
+    BETTER_AUTH_URL=http://localhost:3000 \
+    CORS_ORIGINS=http://localhost:3000 \
+    DATABASE_URL=postgresql://x:x@localhost/x
+RUN mkdir -p dist && bun run ./scripts/generate-openapi.ts && bun run compile
 
-# Production stage - using distroless for minimal attack surface
+# Production stage - minimal distroless image
 FROM gcr.io/distroless/base-debian12:nonroot
 
 WORKDIR /app
 
-# Copy the compiled binary
+# Copy the compiled binaries and pre-generated OpenAPI spec
 COPY --from=builder /app/apps/server/server /app/server
+COPY --from=builder /app/apps/server/worker /app/worker
+COPY --from=builder /app/apps/server/dist/openapi.json /app/apps/server/dist/openapi.json
 
 # Expose port
 EXPOSE 3000
 
-# Run the server
+# Default to server (override with CMD ["./worker"] for worker)
 CMD ["./server"]

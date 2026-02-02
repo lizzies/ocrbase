@@ -13,6 +13,7 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 
 interface CreateJobInput {
+  apiKeyId?: string;
   body: CreateJobBody;
   file: {
     buffer: Buffer;
@@ -25,6 +26,7 @@ interface CreateJobInput {
 }
 
 interface CreateJobFromUrlInput {
+  apiKeyId?: string;
   body: CreateJobBody & { url: string };
   organizationId: string;
   userId: string;
@@ -36,16 +38,16 @@ interface ListJobsResult {
 }
 
 const create = async (input: CreateJobInput): Promise<Job> => {
-  const { body, file, organizationId, userId } = input;
+  const { apiKeyId, body, file, organizationId, userId } = input;
 
   const [newJob] = await db
     .insert(jobs)
     .values({
+      apiKeyId,
       fileKey: "",
       fileName: file.name,
       fileSize: file.size,
-      llmModel: body.llmModel,
-      llmProvider: body.llmProvider,
+      hints: body.hints,
       mimeType: file.type,
       organizationId,
       schemaId: body.schemaId,
@@ -82,34 +84,50 @@ const create = async (input: CreateJobInput): Promise<Job> => {
   return updatedJob;
 };
 
+const extractFilenameFromUrl = (url: string): string => {
+  try {
+    const urlParts = new URL(url);
+    const pathParts = urlParts.pathname.split("/").filter(Boolean);
+    return pathParts.pop() ?? `download-${Date.now()}`;
+  } catch {
+    return `download-${Date.now()}`;
+  }
+};
+
 const createFromUrl = async (input: CreateJobFromUrlInput): Promise<Job> => {
-  const { body, organizationId, userId } = input;
+  const { apiKeyId, body, organizationId, userId } = input;
 
-  const response = await fetch(body.url);
+  const fileName = extractFilenameFromUrl(body.url);
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch file from URL: ${response.statusText}`);
+  const [newJob] = await db
+    .insert(jobs)
+    .values({
+      apiKeyId,
+      fileKey: null,
+      fileName,
+      fileSize: 0,
+      hints: body.hints,
+      mimeType: "application/octet-stream",
+      organizationId,
+      schemaId: body.schemaId,
+      sourceUrl: body.url,
+      status: "pending",
+      type: body.type,
+      userId,
+    })
+    .returning();
+
+  if (!newJob) {
+    throw new Error("Failed to create job");
   }
 
-  const contentType =
-    response.headers.get("content-type") ?? "application/octet-stream";
-  const buffer = Buffer.from(await response.arrayBuffer());
-
-  const urlParts = new URL(body.url);
-  const fileName =
-    urlParts.pathname.split("/").pop() ?? `download-${Date.now()}`;
-
-  return create({
-    body,
-    file: {
-      buffer,
-      name: fileName,
-      size: buffer.length,
-      type: contentType,
-    },
+  await addJob({
+    jobId: newJob.id,
     organizationId,
     userId,
   });
+
+  return newJob;
 };
 
 const getById = async (

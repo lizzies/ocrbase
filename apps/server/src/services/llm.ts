@@ -7,13 +7,23 @@ const openrouter = createOpenAI({
   baseURL: "https://openrouter.ai/api/v1",
 });
 
-const DEFAULT_MODEL = "google/gemini-2.5-flash-preview";
+const DEFAULT_MODEL = "google/gemini-2.5-flash";
 
 interface ProcessExtractionOptions {
   markdown: string;
   schema?: Record<string, unknown>;
-  provider?: string;
-  model?: string;
+  hints?: string;
+}
+
+export interface LlmUsage {
+  promptTokens: number;
+  completionTokens: number;
+}
+
+interface ExtractionResult {
+  data: Record<string, unknown>;
+  usage: LlmUsage;
+  model: string;
 }
 
 interface GenerateSchemaOptions {
@@ -73,7 +83,7 @@ export const llmService = {
       throw new Error("OPENROUTER_API_KEY is not configured");
     }
 
-    const systemPrompt = `You are a JSON schema generator. Analyze the provided document and generate a JSON schema that can be used to extract structured data from similar documents.
+    let systemPrompt = `You are a JSON schema generator. Analyze the provided document and generate a JSON schema that can be used to extract structured data from similar documents.
 
 Return ONLY a valid JSON object with this exact structure:
 {
@@ -84,21 +94,13 @@ Return ONLY a valid JSON object with this exact structure:
 
 Do not include any markdown formatting or explanation. Just the JSON object.`;
 
-    const userPrompt = hints
-      ? `Analyze this document and generate a JSON schema for extracting structured data.
-
-User hints about what to extract: ${hints}
-
-Document content:
-${markdown}`
-      : `Analyze this document and generate a JSON schema for extracting structured data.
-
-Document content:
-${markdown}`;
+    if (hints) {
+      systemPrompt += `\n\nFocus on extracting: ${hints}`;
+    }
 
     const result = await generateText({
       model: openrouter(DEFAULT_MODEL),
-      prompt: userPrompt,
+      prompt: markdown,
       system: systemPrompt,
     });
 
@@ -108,32 +110,36 @@ ${markdown}`;
   async processExtraction({
     markdown,
     schema,
-    model = DEFAULT_MODEL,
-  }: ProcessExtractionOptions): Promise<Record<string, unknown>> {
+    hints,
+  }: ProcessExtractionOptions): Promise<ExtractionResult> {
     if (!env.OPENROUTER_API_KEY) {
       throw new Error("OPENROUTER_API_KEY is not configured");
     }
 
-    const systemPrompt = `You are a data extraction assistant. Extract structured data from the provided markdown content. Return ONLY valid JSON, no markdown formatting or explanation.`;
+    let systemPrompt =
+      "You are a data extraction assistant. Extract structured data from the provided markdown content. Return ONLY valid JSON, no markdown formatting or explanation.";
 
-    const userPrompt = schema
-      ? `Extract data from the following markdown content according to this JSON schema:
+    if (hints) {
+      systemPrompt += `\n\nFocus on extracting: ${hints}`;
+    }
 
-Schema:
-${JSON.stringify(schema, null, 2)}
-
-Markdown Content:
-${markdown}`
-      : `Extract all relevant structured data from the following markdown content and return it as JSON:
-
-${markdown}`;
+    if (schema) {
+      systemPrompt += `\n\nFollow this JSON schema:\n${JSON.stringify(schema, null, 2)}`;
+    }
 
     const result = await generateText({
-      model: openrouter(model),
-      prompt: userPrompt,
+      model: openrouter(DEFAULT_MODEL),
+      prompt: markdown,
       system: systemPrompt,
     });
 
-    return extractJsonFromResponse<Record<string, unknown>>(result.text);
+    return {
+      data: extractJsonFromResponse<Record<string, unknown>>(result.text),
+      model: DEFAULT_MODEL,
+      usage: {
+        completionTokens: result.usage.outputTokens ?? 0,
+        promptTokens: result.usage.inputTokens ?? 0,
+      },
+    };
   },
 };

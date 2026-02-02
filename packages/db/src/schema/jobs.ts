@@ -10,6 +10,7 @@ import {
 
 import { jobStatusEnum, jobTypeEnum } from "../lib/enums";
 import { createId } from "../lib/ids";
+import { apiKeys } from "./api-keys";
 import { organization, user } from "./auth";
 import { schemas } from "./schemas";
 
@@ -25,16 +26,20 @@ export const jobs = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    apiKeyId: text("api_key_id").references(() => apiKeys.id, {
+      onDelete: "set null",
+    }),
     type: jobTypeEnum("type").notNull(),
     status: jobStatusEnum("status").notNull().default("pending"),
     fileName: text("file_name").notNull(),
-    fileKey: text("file_key").notNull(),
+    fileKey: text("file_key"),
     fileSize: integer("file_size").notNull(),
     mimeType: text("mime_type").notNull(),
     sourceUrl: text("source_url"),
     schemaId: text("schema_id").references(() => schemas.id, {
       onDelete: "set null",
     }),
+    hints: text("hints"),
     llmProvider: text("llm_provider"),
     llmModel: text("llm_model"),
     markdownResult: text("markdown_result"),
@@ -56,6 +61,7 @@ export const jobs = pgTable(
   (table) => [
     index("jobs_organization_id_idx").on(table.organizationId),
     index("jobs_user_id_idx").on(table.userId),
+    index("jobs_api_key_id_idx").on(table.apiKeyId),
     index("jobs_status_idx").on(table.status),
     index("jobs_created_at_idx").on(table.createdAt),
   ]
@@ -69,6 +75,10 @@ export const jobsRelations = relations(jobs, ({ one }) => ({
   user: one(user, {
     fields: [jobs.userId],
     references: [user.id],
+  }),
+  apiKey: one(apiKeys, {
+    fields: [jobs.apiKeyId],
+    references: [apiKeys.id],
   }),
   schema: one(schemas, {
     fields: [jobs.schemaId],
